@@ -2,3 +2,12 @@
 title: "p8105_hw6_ns3923"
 output: github_document
 ---
+
+**Set up necessary libraries**
+```{r setup, message=FALSE}
+library(tidyverse)
+library(p8105.datasets) #for problem 2
+```
+
+
+
