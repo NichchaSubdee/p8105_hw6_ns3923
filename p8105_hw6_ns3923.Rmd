@@ -136,3 +136,24 @@ city_results |>
 ```
 
 **Interpretation:** Most cities have odds ratios below 1, meaning homicides involving male victims are less likely to be solved than those involving female victims, after adjusting for victim age and race. Only a few cities, such as Albuquerque, NM, Stockton, CA, and Fresno, CA, have odds ratios above 1. Still, their confidence intervals are wide, so the results are uncertain, and we cannot be sure whether solving rates are truly higher among male than female victims. These uncertain exceptions may reflect a smaller population or more variable case patterns in those cities. The lowest odds ratios are in New York, NY, Baton Rouge, LA, and Omaha, NE. These cities show a much lower chance of solving cases involving male victims. 
+
+## Problem 2: Central Park weather data
+
+**Import data**
+```{r P2_import, message=FALSE}
+data("weather_df")
+```
+
+
+The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:
+
+r^2
+β^1β^2
+Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2
+ and β^1β^2
+.
+
+Note: broom::glance() is helpful for extracting r^2
+ from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing β^1β^2
+
+
