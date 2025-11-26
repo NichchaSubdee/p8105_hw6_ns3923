@@ -7,12 +7,13 @@ output: github_document
 ```{r setup, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(broom)
-library(p8105.datasets) #for problem 2
+library(p8105.datasets)
+library(modelr)
 ```
 
 ## Problem 1: The Washington Post - homicides 
 
-**Import dataset**
+**1) Import dataset**
 ```{r P1_import, message = FALSE}
 homicide_df = read_csv("./data/homicide-data.csv") |> 
   janitor::clean_names()
@@ -20,7 +21,7 @@ homicide_df = read_csv("./data/homicide-data.csv") |>
 homicide_df
 ```
 
-**Cleaning and tidying data**
+**2) Cleaning and tidying data**
 
 * Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. 
 * Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO (don’t report victim race), and omit Tulsa, AL (a data entry mistake). 
@@ -45,7 +46,7 @@ homicide_df = homicide_df |>
 homicide_df 
 ```
 
-**Logistic regression for Baltimore, MD**
+**3) Logistic regression for Baltimore, MD**
 
 * Use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. 
 
@@ -73,9 +74,13 @@ baltimore_or |>
   knitr::kable(digits = 3)
 ```
 
-**Adjusted OR and CI for solving homicides comparing male to female victims**
+**Table 1: the estimated OR and 95% CI of resolved vs unresolved of male compared to female victims**
 
-```{r P1_OR, message=FALSE}
+**Explanation:** In Baltimore, MD, after adjusting for victim age and race, homicides with male victims have lower odds of being resolved compared to homicides with female victims (adjusted OR = 0.426; 95% CI: 0.324, 0.558). Because the confidence interval doesn't include 1, there is significant evidence that cases involving male victims are less likely to be solved.
+
+**4) Adjusted OR and CI for solving homicides comparing male to female victims**
+
+```{r P1_OR, message=FALSE, warning=FALSE}
 city_results = 
   homicide_df |> 
   nest(data = -city_state) |> 
@@ -117,7 +122,9 @@ city_results |>
   )
 ```
 
-**Create a plot shows the estimated ORs and CIs for each city**
+**Table 2: The adjusted OR (Male vs Female) and 95% CI for solving homicides**
+
+**5) Create a plot shows the estimated ORs and CIs for each city**
 
 ```{r P1_plot, message=FALSE, fig.height=8}
 city_results |> 
@@ -139,21 +146,114 @@ city_results |>
 
 ## Problem 2: Central Park weather data
 
-**Import data**
+**1) Import data**
 ```{r P2_import, message=FALSE}
 data("weather_df")
+
+set.seed(123)
 ```
 
+We’ll focus on a simple linear regression with `tmax` as the response with `tmin` and `prcp` as the predictors, and are interested in the distribution of two quantities estimated from these data:
+* Estimated R-squared
+* Ratio of estimated beta_1/beta_2 (β1/β2)
 
-The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:
+**2) Clean dataset**
 
-r^2
-β^1β^2
-Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2
- and β^1β^2
-.
+```{r P2_clean, message=FALSE}
+weather_df_clean = weather_df |>
+  drop_na(tmax, tmin, prcp)
 
-Note: broom::glance() is helpful for extracting r^2
- from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing β^1β^2
+n_obs = nrow(weather_df_clean)
+```
+
+**3) Create 5,000 bootstrap samples and fit the model in each sample**
+
+```{r P2_bootstrap, message=FALSE}
+weather_bootstrap = weather_df_clean |> 
+  bootstrap(5000, id = "strap_id") |> 
+  mutate(
+    model = map(strap, ~ lm(tmax ~ tmin + prcp, data = .x)),
+    glance = map(model, glance),
+    tidy = map(model, tidy)
+  )
+```
+
+**4) The estimated r-squared (r^2) and beta_1 and beta_2 (β1/β2)**
+
+```{r P2_extract, message=FALSE}
+boot_results = weather_bootstrap |> 
+  transmute(
+    strap_id,
+    r_sq = map_dbl(glance, "r.squared"),
+    beta_1 = map_dbl(
+      tidy,
+      ~ .x |> 
+        filter(term == "tmin") |> 
+        pull(estimate)
+    ),
+    beta_2 = map_dbl(
+      tidy,
+      ~ .x |> 
+        filter(term == "prcp") |> 
+        pull(estimate)
+    ),
+    beta_ratio = beta_1 / beta_2
+  )
+
+boot_results
+
+```
+
+**5) Plot the distribution of the estimates r-squared and beta1/beta2 (β1/β2)**
+
+```{r P2_plot, message=FALSE}
+boot_results |> 
+  ggplot(aes(x = r_sq)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  labs(
+    title = "Figure 2: Bootstrap distribution of estimated R-squared",
+    x = expression(hat(r)^2),
+    y = "Count"
+  ) +
+  theme_minimal()
+
+boot_results |> 
+  ggplot(aes(x = beta_ratio)) +
+  geom_histogram(bins = 30, fill = "orange", color = "white") +
+  labs(
+    title = "Figure 3: Bootstrap distribution of β1/β2",
+    x = expression(hat(beta)[1] / hat(beta)[2]),
+    y = "Count"
+  ) +
+  theme_minimal()
+
+```
+
+**Explanation:** The bootstrap distribution of the estimated R-squared is centered around 0.94, indicating the model consistently explains most of the variation in `tmax` across samples. In addition, the distribution of the ratio β1/β2 is entirely negative and more spread out. This happens because `tmin` has a strong positive effect on `tmax`, while
+`prcp` has a small negative effect. Overall, this shows that the effect of `tmin` is very stable, but the small size of the `prcp` coefficient leads to more variability in the ratio.
+
+**6) Identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2 and β1/β2**
+
+```{r P2_CI, message=FALSE}
+boot_ci =
+  boot_results |>
+  summarize(
+    r_sq_lower  = quantile(r_sq, 0.025),
+    r_sq_upper  = quantile(r_sq, 0.975),
+    ratio_lower = quantile(beta_ratio, 0.025),
+    ratio_upper = quantile(beta_ratio, 0.975)
+  )
+
+boot_ci |> 
+  knitr::kable(digits = 3,
+               col.names = c(
+                 "R² lower",
+                 "R² upper",
+                 "β₁/β₂ lower",
+                 "β₁/β₂ upper"
+               ))
+```
+
+**Explanation:** The 95% bootstrap confidence interval for R-squared (0.934 to 0.947) shows that the model fit is very stable and consistently explains more than 93% of the variation in `tmax`. For the ratio β1/β2, the confidence interval (–277.17 to –125.71) is negative, which matches the signs of the estimated slopes. This means that `tmin` has a strong positive effect on `tmax`, while `prcp` has a small negative effect across samples.
 
 
