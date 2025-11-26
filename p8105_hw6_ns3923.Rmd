@@ -22,7 +22,9 @@ homicide_df
 
 **Cleaning and tidying data**
 
-Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
+* Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. 
+* Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO (don’t report victim race), and omit Tulsa, AL (a data entry mistake). 
+* Limit those for whom victim_race is white or black, and victim_age is numeric.
 
 ```{r P1_clean, message = FALSE, warning=FALSE}
 homicide_df = homicide_df |> 
@@ -40,14 +42,13 @@ homicide_df = homicide_df |>
   drop_na(victim_age, victim_sex, victim_race)
 
 ##Check
-homicide_df |> 
-  count(city_state) |> 
-  arrange(desc(n))
+homicide_df 
 ```
 
 **Logistic regression for Baltimore, MD**
 
-For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+* Use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. 
+
 ```{r P1_baltimore, message = FALSE}
 baltimore_df = 
   homicide_df |> 
@@ -65,13 +66,14 @@ baltimore_or =
   baltimore_fit |> 
   tidy(conf.int = TRUE, exponentiate = TRUE) |> 
   filter(term == "victim_sexMale") |> 
+  mutate(term = "Male vs Female (ref)") |> 
   select(term, estimate, conf.low, conf.high)
 
 baltimore_or |> 
   knitr::kable(digits = 3)
 ```
 
-Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
+**Adjusted OR and CI for solving homicides comparing male to female victims**
 
 ```{r P1_OR, message=FALSE}
 city_results = 
@@ -97,13 +99,26 @@ city_results =
     or_upper = conf.high
   )
 
-##Check
 city_results |> 
   arrange(or) |> 
-  head()
+  select(city_state, or, or_lower, or_upper) |> 
+  mutate(
+    or       = round(or, 3),
+    or_lower = round(or_lower, 3),
+    or_upper = round(or_upper, 3)
+  ) |> 
+  knitr::kable(
+    col.names = c(
+      "City",
+      "Adjusted OR (Male vs Female)",
+      "Lower 95% CI",
+      "Upper 95% CI"
+    )
+  )
 ```
 
-Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
+**Create a plot shows the estimated ORs and CIs for each city**
+
 ```{r P1_plot, message=FALSE, fig.height=8}
 city_results |> 
   mutate(city_state = fct_reorder(city_state, or)) |> 
@@ -113,10 +128,11 @@ city_results |>
   geom_hline(yintercept = 1, linetype = "dashed") +
   coord_flip() +
   labs(
-    title = "Adjusted Odds Ratios for Solving Homicides (Male vs Female)",
+    title = "Figure 1: Adjusted ORs for solving homicides (Male vs Female)",
     x = "City",
     y = "Adjusted OR"
   ) +
   theme_minimal()
 ```
 
+**Interpretation:** Most cities have odds ratios below 1, meaning homicides involving male victims are less likely to be solved than those involving female victims, after adjusting for victim age and race. Only a few cities, such as Albuquerque, NM, Stockton, CA, and Fresno, CA, have odds ratios above 1. Still, their confidence intervals are wide, so the results are uncertain, and we cannot be sure whether solving rates are truly higher among male than female victims. These uncertain exceptions may reflect a smaller population or more variable case patterns in those cities. The lowest odds ratios are in New York, NY, Baton Rouge, LA, and Omaha, NE. These cities show a much lower chance of solving cases involving male victims. 
