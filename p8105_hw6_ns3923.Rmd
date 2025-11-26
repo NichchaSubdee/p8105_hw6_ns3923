@@ -6,26 +6,117 @@ output: github_document
 **Set up necessary libraries**
 ```{r setup, message=FALSE, warning=FALSE}
 library(tidyverse)
+library(broom)
 library(p8105.datasets) #for problem 2
 ```
 
-## Problem 1
+## Problem 1: The Washington Post - homicides 
 
-The Washington Post has gathered data on homicides in 50 large U.S. cities and made the data available through a GitHub repository here. You can read their accompanying article here.
-
-```{r P1_import, message =FALSE}
+**Import dataset**
+```{r P1_import, message = FALSE}
 homicide_df = read_csv("./data/homicide-data.csv") |> 
   janitor::clean_names()
 
 homicide_df
 ```
 
+**Cleaning and tidying data**
 
 Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
 
+```{r P1_clean, message = FALSE, warning=FALSE}
+homicide_df = homicide_df |> 
+  mutate(
+    city_state = str_c(city, state, sep = ", "),
+    resolved   = if_else(disposition == "Closed by arrest", 1, 0),
+    victim_age = as.numeric(victim_age)
+  ) |> 
+  
+  filter(
+    !city_state %in% c("Dallas, TX", "Phoenix, AZ", 
+                       "Kansas City, MO", "Tulsa, AL"),
+    victim_race %in% c("White", "Black")
+  ) |> 
+  drop_na(victim_age, victim_sex, victim_race)
+
+##Check
+homicide_df |> 
+  count(city_state) |> 
+  arrange(desc(n))
+```
+
+**Logistic regression for Baltimore, MD**
+
 For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+```{r P1_baltimore, message = FALSE}
+baltimore_df = 
+  homicide_df |> 
+  filter(city_state == "Baltimore, MD")
+
+baltimore_fit = 
+  baltimore_df |> 
+  glm(
+    resolved ~ victim_age + victim_sex + victim_race,
+    data   = _,
+    family = binomial()
+  )
+
+baltimore_or = 
+  baltimore_fit |> 
+  tidy(conf.int = TRUE, exponentiate = TRUE) |> 
+  filter(term == "victim_sexMale") |> 
+  select(term, estimate, conf.low, conf.high)
+
+baltimore_or |> 
+  knitr::kable(digits = 3)
+```
 
 Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
 
+```{r P1_OR, message=FALSE}
+city_results = 
+  homicide_df |> 
+  nest(data = -city_state) |> 
+  mutate(
+    models = map(
+      data,
+      ~ glm(resolved ~ victim_age + victim_sex + victim_race,
+            data = ., family = binomial())
+    ),
+    tidy_res = map(
+      models,
+      ~ tidy(., conf.int = TRUE, exponentiate = TRUE)
+    )
+  ) |> 
+  select(city_state, tidy_res) |> 
+  unnest(tidy_res) |> 
+  filter(term == "victim_sexMale") |> 
+  rename(
+    or       = estimate,
+    or_lower = conf.low,
+    or_upper = conf.high
+  )
+
+##Check
+city_results |> 
+  arrange(or) |> 
+  head()
+```
+
 Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
+```{r P1_plot, message=FALSE, fig.height=8}
+city_results |> 
+  mutate(city_state = fct_reorder(city_state, or)) |> 
+  ggplot(aes(x = city_state, y = or)) +
+  geom_point(color = "red") +
+  geom_errorbar(aes(ymin = or_lower, ymax = or_upper), width = 0.5) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  coord_flip() +
+  labs(
+    title = "Adjusted Odds Ratios for Solving Homicides (Male vs Female)",
+    x = "City",
+    y = "Adjusted OR"
+  ) +
+  theme_minimal()
+```
 
