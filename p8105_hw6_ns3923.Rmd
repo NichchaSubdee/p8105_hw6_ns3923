@@ -380,7 +380,7 @@ cv_results |>
   knitr::kable(digits = 2,
   col.names = c("Proposed model",
               "Main effect only",
-              "2&3-way interactions of head x length x sex"
+              "2- and 3-way interactions of head x length x sex"
                 ))
 
 ```
